@@ -167,7 +167,7 @@ main (int argc, char *argv[])
   for ( boxRow=0; boxRow<noBoxesY; boxRow++ )
   for ( boxCol=0; boxCol<noBoxesX; boxCol++ )
   {
-    boxIndex=boxRow*boxCol;
+    boxIndex=(boxRow*noBoxesY)+boxCol;
 
     path_begin[boxIndex].x = 0; /* TODO */
     path_begin[boxIndex].y = 0; /* TODO */
