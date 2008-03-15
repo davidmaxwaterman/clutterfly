@@ -1,7 +1,10 @@
 #include <stdlib.h>
+#include <stdio.h>
 #include <clutter/clutter.h>
+#include <clutter/cogl.h>
 
-const guint noBoxes=4;
+const guint noBoxesX=2;
+const guint noBoxesY=1;
 
 static ClutterActor *
 clone_box (ClutterTexture *original, guint width, guint height, guint depth)
@@ -64,7 +67,8 @@ gint
 main (int argc, char *argv[])
 {
   /* utility vars */
-  guint boxIndex;
+  const guint noBoxes = noBoxesX*noBoxesY;
+  guint boxIndex, boxRow, boxCol;
   GError *error;
 
   /* dimensions */
@@ -82,12 +86,11 @@ main (int argc, char *argv[])
 
   /* objects */
   ClutterActor     *stage;
-  ClutterActor     *group, *hand, *label, *rect, *janus, *box[noBoxes];
+  ClutterActor     *group, *hand, *box[noBoxes];
   GdkPixbuf        *pixbuf;
 
   /* properties */
   ClutterColor      stage_color = { 0xcc, 0xcc, 0xcc, 0xff };
-  ClutterColor      rect_color  = { 0, 0, 0, 0x88 };
 
   /* initialise */
   clutter_init (&argc, &argv);
@@ -110,8 +113,8 @@ main (int argc, char *argv[])
   clutter_stage_get_perspective (CLUTTER_STAGE(stage), &fovy, &aspect, &z_near, &z_far);
   clutter_actor_get_size (CLUTTER_ACTOR (stage), &stage_width, &stage_height);
   stage_depth      = stage_width*4;
-  stage_width_far  = stage_width*z_far/z_near;
-  stage_height_far = stage_height*z_far/z_near;
+  stage_width_far  = stage_width*z_far/z_near/100;
+  stage_height_far = stage_height*z_far/z_near/100;
   button_width     = stage_width;
   button_height    = stage_height;
   button_depth     = button_width/4;
@@ -161,10 +164,13 @@ main (int argc, char *argv[])
     -stage_depth,
     0);
 
-  for ( boxIndex=0; boxIndex<noBoxes; boxIndex++ )
+  for ( boxRow=0; boxRow<noBoxesY; boxRow++ )
+  for ( boxCol=0; boxCol<noBoxesX; boxCol++ )
   {
-    path_begin[boxIndex].x = (boxIndex%2)*stage_width_far;
-    path_begin[boxIndex].y = (boxIndex/2)*stage_height_far;
+    boxIndex=boxRow*boxCol;
+
+    path_begin[boxIndex].x = 0; /* TODO */
+    path_begin[boxIndex].y = 0; /* TODO */
 
     /* create and orient button */
     box[boxIndex] = clone_box (CLUTTER_TEXTURE (hand), button_width, button_height, button_depth);
@@ -196,7 +202,7 @@ main (int argc, char *argv[])
   g_object_unref (r_behave_y);
   g_object_unref (t_behave_z);
   for ( boxIndex=0; boxIndex<noBoxes; boxIndex++ )
-	  g_object_unref (t_behave_xy[ boxIndex ]);
+    g_object_unref (t_behave_xy[ boxIndex ]);
   g_object_unref (timeline);
 
   return EXIT_SUCCESS;
