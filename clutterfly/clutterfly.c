@@ -2,9 +2,25 @@
 #include <stdio.h>
 #include <clutter/clutter.h>
 #include <clutter/cogl.h>
+/*#include <GL/glx.h>*/
+#include <GL/glu.h>
 
-const guint noBoxesX=2;
-const guint noBoxesY=1;
+const gint NO_BOXES_X=2;
+const gint NO_BOXES_Y=2;
+
+static gboolean
+on_button_release( ClutterActor *rect, ClutterEvent *event, gpointer data )
+{
+  ClutterTimeline  *timeline = (ClutterTimeline*)data;
+  gint x = 0, y = 0;
+  clutter_event_get_coords (event, &x, &y);
+
+  clutter_timeline_start (timeline);
+
+  g_print ("Click-release on rectangle at (%d, %d)\n", x, y);
+
+  return TRUE; /* Stop further handling of this event. */
+}
 
 static ClutterActor *
 clone_box (ClutterTexture *original, guint width, guint height, guint depth)
@@ -67,8 +83,7 @@ gint
 main (int argc, char *argv[])
 {
   /* utility vars */
-  const guint noBoxes = noBoxesX*noBoxesY;
-  guint boxIndex, boxRow, boxCol;
+  guint boxRow, boxCol;
   GError *error;
 
   /* dimensions */
@@ -77,16 +92,16 @@ main (int argc, char *argv[])
   gfloat fovy, aspect, z_near, z_far;
 
   /* animation */
-  ClutterKnot path_begin[noBoxes], path_end;
-  ClutterTimeline  *timeline;
-  ClutterBehaviour *t_behave_xy[noBoxes];   /* translation from xy to middle of screen */
-  ClutterBehaviour *t_behave_z;             /* translation from back stage to front stage */
-  ClutterBehaviour *r_behave_z; /* z axis component of tumble */
-  ClutterBehaviour *r_behave_y; /* y axis component of tumble */
+  ClutterKnot      pathBegin[NO_BOXES_X][NO_BOXES_Y], path_end;
+  ClutterTimeline  *timeline [NO_BOXES_X][NO_BOXES_Y];
+  ClutterBehaviour *transXY  [NO_BOXES_X][NO_BOXES_Y];   /* translation from xy to middle of screen */
+  ClutterBehaviour *transZ   [NO_BOXES_X][NO_BOXES_Y];             /* translation from back stage to front stage */
+  ClutterBehaviour *rotZ     [NO_BOXES_X][NO_BOXES_Y]; /* z axis component of tumble */
+  ClutterBehaviour *rotY     [NO_BOXES_X][NO_BOXES_Y]; /* y axis component of tumble */
 
   /* objects */
   ClutterActor     *stage;
-  ClutterActor     *group, *hand, *box[noBoxes];
+  ClutterActor     *group, *hand, *box[NO_BOXES_X][NO_BOXES_Y];
   GdkPixbuf        *pixbuf;
 
   /* properties */
@@ -111,8 +126,9 @@ main (int argc, char *argv[])
 
   /* initialise dimensions */
   clutter_stage_get_perspective (CLUTTER_STAGE(stage), &fovy, &aspect, &z_near, &z_far);
+
   clutter_actor_get_size (CLUTTER_ACTOR (stage), &stage_width, &stage_height);
-  stage_depth      = stage_width*4;
+  stage_depth      = z_far;
   stage_width_far  = stage_width*z_far/z_near/100;
   stage_height_far = stage_height*z_far/z_near/100;
   button_width     = stage_width;
@@ -121,11 +137,11 @@ main (int argc, char *argv[])
   path_end.x       = stage_width/2;
   path_end.y       = stage_height/2;
 
-
-  /* signal to quit */
+  /* signal to quit
   g_signal_connect (stage,
                     "button-press-event", G_CALLBACK (clutter_main_quit),
                     NULL);
+  */
 
   /* add a group to stage */
   group = clutter_group_new ();
@@ -133,77 +149,97 @@ main (int argc, char *argv[])
   clutter_actor_show (group);
 
   /* make new timeline - 3 seconds, at 60 fps */
-  timeline = clutter_timeline_new (180, 60);
-
-  /* make behaviours */
-  /* tumble */
-  r_behave_y = clutter_behaviour_rotate_new (
-    clutter_alpha_new_full (
-      timeline,
-      CLUTTER_ALPHA_RAMP_INC,
-      NULL, NULL),
-    CLUTTER_Y_AXIS,
-    CLUTTER_ROTATE_CW,
-    0, 180);
-
-  r_behave_z = clutter_behaviour_rotate_new (
-    clutter_alpha_new_full (
-      timeline,
-      CLUTTER_ALPHA_SINE_HALF,
-      NULL, NULL),
-    CLUTTER_Z_AXIS,
-    CLUTTER_ROTATE_CW,
-    0, 90);
-
-  /* translate from back stage to front stage */
-  t_behave_z = clutter_behaviour_depth_new (
-    clutter_alpha_new_full (
-      timeline,
-      CLUTTER_ALPHA_RAMP_INC,
-      NULL, NULL),
-    -stage_depth,
-    0);
-
-  for ( boxRow=0; boxRow<noBoxesY; boxRow++ )
-  for ( boxCol=0; boxCol<noBoxesX; boxCol++ )
+  for ( boxRow=0; boxRow<NO_BOXES_Y; boxRow++ )
+  for ( boxCol=0; boxCol<NO_BOXES_X; boxCol++ )
   {
-    boxIndex=(boxRow*noBoxesY)+boxCol;
+    ClutterKnot      *thisPathBegin = &(pathBegin[ boxCol ][ boxRow ]);
+    ClutterActor     *thisBox      = box     [ boxCol ][ boxRow ];
+    ClutterTimeline  *thisTimeline = timeline[ boxCol ][ boxRow ];
+    ClutterBehaviour *thisRotY     = rotY    [ boxCol ][ boxRow ];
+    ClutterBehaviour *thisRotZ     = rotZ    [ boxCol ][ boxRow ];
+    ClutterBehaviour *thisTransZ   = transZ  [ boxCol ][ boxRow ];
+    ClutterBehaviour *thisTransXY  = transXY [ boxCol ][ boxRow ];
 
-    path_begin[boxIndex].x = 0; /* TODO */
-    path_begin[boxIndex].y = 0; /* TODO */
+    gdouble boxGapX = stage_width/NO_BOXES_X;
+    gdouble boxGapY = stage_height/NO_BOXES_Y;
+
+    thisTimeline = clutter_timeline_new (180, 60);
+
+    /* make behaviours */
+    /* tumble */
+    thisRotY = clutter_behaviour_rotate_new (
+        clutter_alpha_new_full (
+          thisTimeline,
+          CLUTTER_ALPHA_SINE,
+          NULL, NULL),
+        CLUTTER_Y_AXIS,
+        CLUTTER_ROTATE_CW,
+        0, 180);
+
+    thisRotZ = clutter_behaviour_rotate_new (
+        clutter_alpha_new_full (
+          thisTimeline,
+          CLUTTER_ALPHA_SINE_HALF,
+          NULL, NULL),
+        CLUTTER_Z_AXIS,
+        CLUTTER_ROTATE_CW,
+        0, 90);
+
+    /* translate from back stage to front stage */
+    thisTransZ = clutter_behaviour_depth_new (
+        clutter_alpha_new_full (
+          thisTimeline,
+          CLUTTER_ALPHA_RAMP_INC,
+          NULL, NULL),
+        -z_far*20,
+        -z_near );
+
+    thisPathBegin->x = button_width/2 + ((gint)boxCol*2-(NO_BOXES_X-1))*boxGapX/2*2;
+    thisPathBegin->y = button_height/2 + ((gint)boxRow*2-(NO_BOXES_Y-1))*boxGapY/2*2;
 
     /* create and orient button */
-    box[boxIndex] = clone_box (CLUTTER_TEXTURE (hand), button_width, button_height, button_depth);
-    clutter_container_add_actor (CLUTTER_CONTAINER (stage), box[boxIndex]);
-    clutter_actor_set_position (box[boxIndex], path_begin[boxIndex].x, path_begin[boxIndex].y);
-    clutter_actor_set_size (box[boxIndex], button_width, button_height);
+    thisBox = clone_box (CLUTTER_TEXTURE (hand), button_width, button_height, button_depth);
+    clutter_container_add_actor( CLUTTER_CONTAINER (stage), thisBox );
+    clutter_actor_set_position (thisBox, thisPathBegin->x, thisPathBegin->y);
 
     /* translate from xy stage to middle of screen */
-    t_behave_xy[ boxIndex ] = clutter_behaviour_path_new (
-      clutter_alpha_new_full ( timeline, CLUTTER_ALPHA_RAMP_INC, NULL, NULL),
-      NULL, 0 );
-    clutter_behaviour_path_append_knot ( CLUTTER_BEHAVIOUR_PATH (t_behave_xy[ boxIndex ]), &path_begin[ boxIndex ] );
-    clutter_behaviour_path_append_knot ( CLUTTER_BEHAVIOUR_PATH (t_behave_xy[ boxIndex ]), &path_end );
+    thisTransXY = clutter_behaviour_path_new (
+        clutter_alpha_new_full ( thisTimeline, CLUTTER_ALPHA_RAMP_INC, NULL, NULL),
+        NULL, 0 );
+    clutter_behaviour_path_append_knot ( CLUTTER_BEHAVIOUR_PATH (thisTransXY), &pathBegin[ boxCol ][ boxRow ] );
+    clutter_behaviour_path_append_knot ( CLUTTER_BEHAVIOUR_PATH (thisTransXY), &path_end );
 
     /* apply behaviours */
-    clutter_behaviour_apply (r_behave_z, box[boxIndex]);
-    clutter_behaviour_apply (r_behave_y, box[boxIndex]);
-    clutter_behaviour_apply (t_behave_z, box[boxIndex]);
-    clutter_behaviour_apply (t_behave_xy[boxIndex], box[boxIndex]);
+    clutter_behaviour_apply (thisRotZ, thisBox);
+    clutter_behaviour_apply (thisRotY, thisBox);
+    clutter_behaviour_apply (thisTransZ, thisBox);
+    clutter_behaviour_apply (thisTransXY, thisBox);
+
+    /* Allow the actor to emit events.  */
+    clutter_actor_set_reactive (thisBox, TRUE);
+    g_signal_connect (thisBox, "button-release-event",
+        G_CALLBACK (on_button_release), thisTimeline );
   }
 
   clutter_actor_show (stage);
 
-  clutter_timeline_start (timeline);
-
   clutter_main ();
 
-  g_object_unref (r_behave_z);
-  g_object_unref (r_behave_y);
-  g_object_unref (t_behave_z);
-  for ( boxIndex=0; boxIndex<noBoxes; boxIndex++ )
-    g_object_unref (t_behave_xy[ boxIndex ]);
-  g_object_unref (timeline);
+  for ( boxRow=0; boxRow<NO_BOXES_Y; boxRow++ )
+  for ( boxCol=0; boxCol<NO_BOXES_X; boxCol++ )
+  {
+    ClutterTimeline  *thisTimeline = timeline[ boxCol ][ boxRow ];
+    ClutterBehaviour *thisRotY     = rotY    [ boxCol ][ boxRow ];
+    ClutterBehaviour *thisRotZ     = rotZ    [ boxCol ][ boxRow ];
+    ClutterBehaviour *thisTransZ   = transZ  [ boxCol ][ boxRow ];
+    ClutterBehaviour *thisTransXY  = transXY [ boxCol ][ boxRow ];
+
+    g_object_unref (thisRotZ);
+    g_object_unref (thisRotY);
+    g_object_unref (thisTransZ);
+    g_object_unref (thisTransXY);
+    g_object_unref (thisTimeline);
+  }
 
   return EXIT_SUCCESS;
 }
