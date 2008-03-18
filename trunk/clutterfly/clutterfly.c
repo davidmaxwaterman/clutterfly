@@ -182,7 +182,7 @@ main( int argc, char *argv[] )
     /* make behaviours */
     /* tumble */
     thisRotY = clutter_behaviour_rotate_new(
-      clutter_alpha_new_full( thisTimeline, CLUTTER_ALPHA_SINE, NULL, NULL ),
+      clutter_alpha_new_full( thisTimeline, CLUTTER_ALPHA_RAMP_INC, NULL, NULL ),
       CLUTTER_Y_AXIS,
       CLUTTER_ROTATE_CW,
       0, 180 );
