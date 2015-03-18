@@ -1,0 +1,1 @@
+This is a demo of the Clutter library that attempts to immitate an old demo supplied as part of SGI's 4Dgifts.
